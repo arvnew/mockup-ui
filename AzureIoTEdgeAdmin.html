@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Azure VM & IoT Edge — Professional UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* small niceties */
+    .glass { background: rgba(255,255,255,0.6); backdrop-filter: blur(6px); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- HEADER -->
+  <header class="bg-indigo-700 text-white p-4 shadow">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none"><path d="M3 13h8V3H3v10zM13 21h8V11h-8v10zM3 21h8v-6H3v6zM13 11h8V3h-8v8z" fill="currentColor"/></svg>
+        <div>
+          <div class="text-lg font-semibold">Mxalog — Azure IoT Edge Admin</div>
+          <div class="text-xs opacity-80">VM & OPC Publisher Management Portal</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="text-sm">Signed in as <strong>admin@mlg</strong></div>
+        <button class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded">Settings</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-7xl mx-auto grid grid-cols-12 gap-6 p-6">
+
+    <!-- SIDEBAR -->
+    <aside class="col-span-3 lg:col-span-2">
+      <div class="bg-white rounded-xl p-4 shadow sticky top-6">
+        <div class="text-sm text-slate-600 mb-4">Navigation</div>
+        <nav class="space-y-2">
+          <button id="navDashboard" class="w-full text-left px-3 py-2 rounded-lg bg-indigo-50" onclick="showView('dashboard')">Dashboard</button>
+          <button id="navVMs" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onclick="showView('vms')">VMs</button>
+          <button id="navOPC" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onclick="showView('opc')">OPC Publisher</button>
+          <button id="navModules" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50" onclick="showView('modules')">Modules</button>
+        </nav>
+
+        <div class="mt-6 border-t pt-4 text-sm text-slate-600">
+          Quick Actions
+          <div class="mt-3 flex flex-col gap-2">
+            <button class="bg-green-600 text-white px-3 py-2 rounded" onclick="openCreateVmModal()">Create VM</button>
+            <button class="bg-yellow-500 text-white px-3 py-2 rounded" onclick="refreshVmList()">Refresh VM List</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="col-span-9 lg:col-span-10 space-y-6">
+
+      <!-- DASHBOARD -->
+      <section id="view-dashboard" class="bg-white rounded-xl p-6 shadow">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-semibold">Dashboard</h2>
+            <div class="text-sm text-slate-500">Overview of VMs, Edge runtime and health</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="openCreateVmModal()">Create VM</button>
+            <button class="bg-gray-100 px-4 py-2 rounded" onclick="refreshVmList()">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="p-4 rounded-lg glass shadow-sm">
+            <div class="text-sm text-slate-500">Total VMs</div>
+            <div class="text-2xl font-semibold" id="statTotalVMs">0</div>
+            <div class="text-xs text-slate-500 mt-2">Provisioning, running and stopped VMs</div>
+          </div>
+          <div class="p-4 rounded-lg glass shadow-sm">
+            <div class="text-sm text-slate-500">IoT Edge Modules</div>
+            <div class="text-2xl font-semibold" id="statModules">0</div>
+            <div class="text-xs text-slate-500 mt-2">Modules deployed across VMs</div>
+          </div>
+          <div class="p-4 rounded-lg glass shadow-sm">
+            <div class="text-sm text-slate-500">OPC Endpoints</div>
+            <div class="text-2xl font-semibold" id="statEndpoints">0</div>
+            <div class="text-xs text-slate-500 mt-2">Configured OPC endpoints</div>
+          </div>
+        </div>
+
+        <!-- VM List -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2">VMs</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full table-auto">
+              <thead class="bg-slate-50 text-sm text-slate-600">
+                <tr>
+                  <th class="px-3 py-2 text-left">VM Name</th>
+                  <th class="px-3 py-2 text-left">Status</th>
+                  <th class="px-3 py-2 text-left">OS</th>
+                  <th class="px-3 py-2 text-left">Location</th>
+                  <th class="px-3 py-2 text-left">IoT Edge</th>
+                  <th class="px-3 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardVmTable" class="text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VMS VIEW -->
+      <section id="view-vms" class="bg-white rounded-xl p-6 shadow hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-2xl font-semibold">Virtual Machines</h2>
+          <div class="text-sm text-slate-500">Create and manage VMs</div>
+        </div>
+
+        <div class="mb-4 flex justify-between items-center">
+          <div class="flex gap-2">
+            <input id="vmSearch" oninput="renderVmTable()" class="border px-3 py-2 rounded w-64" placeholder="Search VM by name..." />
+            <button class="bg-gray-100 px-3 py-2 rounded" onclick="renderVmTable()">Filter</button>
+          </div>
+          <div>
+            <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="openCreateVmModal()">Create VM</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-slate-50 text-sm text-slate-600">
+              <tr>
+                <th class="px-3 py-2 text-left">VM Name</th>
+                <th class="px-3 py-2 text-left">Status</th>
+                <th class="px-3 py-2 text-left">OS</th>
+                <th class="px-3 py-2 text-left">Location</th>
+                <th class="px-3 py-2 text-left">Created</th>
+                <th class="px-3 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vmTableBody" class="text-sm"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- VM DETAILS / IOT EDGE -->
+      <section id="view-vm-details" class="bg-white rounded-xl p-6 shadow hidden">
+        <div class="flex items-start justify-between mb-4 gap-4">
+          <div>
+            <h2 id="detailVmName" class="text-2xl font-semibold"></h2>
+            <div class="text-sm text-slate-500" id="detailVmInfo">VM details</div>
+          </div>
+          <div class="flex gap-3">
+            <button class="bg-gray-100 px-3 py-2 rounded" onclick="backToVmList()">← Back</button>
+            <button class="bg-indigo-600 text-white px-4 py-2 rounded" onclick="refreshVmDetails()">Refresh</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="p-4 rounded-lg border">
+            <div class="text-sm text-slate-500">Status</div>
+            <div class="text-xl font-semibold" id="detailVmStatus">-</div>
+            <div class="mt-2 text-xs text-slate-500">Use control actions below</div>
+            <div class="mt-4 flex gap-2">
+              <button class="bg-blue-600 text-white px-3 py-2 rounded" onclick="vmAction(currentVm.id, 'start')">Start</button>
+              <button class="bg-yellow-500 text-white px-3 py-2 rounded" onclick="vmAction(currentVm.id, 'stop')">Stop</button>
+              <button class="bg-red-600 text-white px-3 py-2 rounded" onclick="vmAction(currentVm.id, 'delete')">Delete</button>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-lg border">
+            <div class="text-sm text-slate-500">IoT Edge Runtime</div>
+            <div class="mt-2">
+              <div class="flex items-center gap-2">
+                <div class="text-sm font-semibold" id="detailIotEdgeStatus">Not Installed</div>
+                <div class="text-xs text-slate-500">(<span id="detailIotEdgeVersion">-</span>)</div>
+              </div>
+              <div class="mt-3 flex gap-2">
+                <button class="bg-green-600 text-white px-3 py-2 rounded" onclick="installIotEdge()">Install</button>
+                <button class="bg-red-500 text-white px-3 py-2 rounded" onclick="uninstallIotEdge()">Uninstall</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-lg border">
+            <div class="text-sm text-slate-500">Quick Actions</div>
+            <div class="mt-2 flex flex-col gap-2">
+              <button class="bg-indigo-600 text-white px-3 py-2 rounded" onclick="showView('opc')">Open OPC Publisher</button>
+              <button class="bg-gray-100 px-3 py-2 rounded" onclick="showView('modules')">Open Modules</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modules list for this VM -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2">Modules on this VM</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-slate-50 text-sm text-slate-600">
+                <tr>
+                  <th class="px-3 py-2 text-left">Module</th>
+                  <th class="px-3 py-2 text-left">Status</th>
+                  <th class="px-3 py-2 text-left">Version</th>
+                  <th class="px-3 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="vmModulesTable" class="text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- OPC PUBLISHER -->
+      <section id="view-opc" class="bg-white rounded-xl p-6 shadow hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-semibold">OPC Publisher</h2>
+            <div class="text-sm text-slate-500">Configure endpoints, credentials, nodes and deploy pn.json</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="bg-yellow-500 text-white px-4 py-2 rounded" onclick="previewPnJson()">Preview pn.json</button>
+            <button class="bg-indigo-600 text-white px-4 py-2 rounded" onclick="generatePnJson()">Generate pn.json</button>
+            <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="deployPnJson()">Deploy to IoT Edge</button>
+            <button class="bg-gray-100 px-4 py-2 rounded" onclick="restartOpcPublisher()">Restart OPC Publisher</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div class="col-span-2 p-4 border rounded-lg">
+            <h4 class="font-semibold mb-2">Endpoint Configuration</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-sm text-slate-600">Endpoint URL</label>
+                <input id="endpointUrl" class="w-full border rounded px-3 py-2" placeholder="opc.tcp://192.168.1.10:49320" />
+              </div>
+              <div>
+                <label class="text-sm text-slate-600">Protocol</label>
+                <select id="endpointProtocol" class="w-full border rounded px-3 py-2">
+                  <option value="opc.tcp">OPC.TCP</option>
+                  <option value="https">UA-HTTPS</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm text-slate-600">Security Mode</label>
+                <select id="endpointSecurityMode" class="w-full border rounded px-3 py-2">
+                  <option>None</option>
+                  <option>Sign</option>
+                  <option>SignAndEncrypt</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-sm text-slate-600">Security Policy</label>
+                <select id="endpointSecurityPolicy" class="w-full border rounded px-3 py-2">
+                  <option>None</option>
+                  <option>Basic128Rsa15</option>
+                  <option>Basic256</option>
+                  <option>Basic256Sha256</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="text-sm text-slate-600">Authentication Type</label>
+                <select id="endpointAuthType" class="w-full border rounded px-3 py-2" onchange="onEndpointAuthChange()">
+                  <option value="Anonymous">Anonymous</option>
+                  <option value="UsernamePassword">Username/Password</option>
+                  <option value="Certificate">Certificate</option>
+                </select>
+              </div>
+              <div id="endpointAuthExtras"></div>
+
+              <div class="md:col-span-2 mt-2">
+                <button class="bg-indigo-600 text-white px-4 py-2 rounded" onclick="saveEndpoint()">Save Endpoint</button>
+                <button class="bg-gray-100 px-4 py-2 rounded ml-2" onclick="testEndpoint()">Test Connection</button>
+                <button class="bg-white border px-4 py-2 rounded ml-2" onclick="loadEndpoint()">Load Saved</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 border rounded-lg">
+            <h4 class="font-semibold mb-2">Summary</h4>
+            <div class="text-sm text-slate-600 mb-2">Preview quick stats about your current endpoint and nodes</div>
+            <div class="text-sm"><strong>Endpoint:</strong> <span id="summaryEndpoint">Not set</span></div>
+            <div class="text-sm mt-2"><strong>Nodes:</strong> <span id="summaryNodesCount">0</span></div>
+            <div class="mt-4">
+              <button class="bg-green-600 text-white px-3 py-2 rounded" onclick="generatePnJson()">Generate pn.json</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Node Management -->
+        <div class="bg-slate-50 p-4 rounded-lg border">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-semibold">Nodes</h4>
+            <div class="flex gap-2">
+              <button class="bg-green-600 text-white px-3 py-2 rounded" onclick="openAddNodeModal()">Add Node</button>
+              <button class="bg-gray-100 px-3 py-2 rounded" onclick="clearNodes()">Clear All</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-white border-b">
+                <tr>
+                  <th class="px-3 py-2 text-left">Node ID</th>
+                  <th class="px-3 py-2 text-left">Display Name</th>
+                  <th class="px-3 py-2 text-left">Sampling (ms)</th>
+                  <th class="px-3 py-2 text-left">Publishing (ms)</th>
+                  <th class="px-3 py-2 text-left">Deadband</th>
+                  <th class="px-3 py-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="nodesTableBody" class="bg-white"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- MODULES -->
+      <section id="view-modules" class="bg-white rounded-xl p-6 shadow hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-2xl font-semibold">Module Management</h2>
+            <div class="text-sm text-slate-500">Install, start/stop, update and remove modules</div>
+          </div>
+          <div>
+            <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="openAddModuleModal()">Add Module</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-slate-50 text-sm text-slate-600">
+              <tr>
+                <th class="px-3 py-2 text-left">Module</th>
+                <th class="px-3 py-2 text-left">Status</th>
+                <th class="px-3 py-2 text-left">Image</th>
+                <th class="px-3 py-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="modulesTableBody" class="text-sm"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS -->
+  <!-- Create VM -->
+  <div id="modalCreateVm" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg w-11/12 md:w-1/2 p-6">
+      <h3 class="text-lg font-semibold mb-3">Create New VM</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="createVmName" placeholder="VM Name" class="border px-3 py-2 rounded" />
+        <select id="createVmOS" class="border px-3 py-2 rounded">
+          <option>Windows Server 2022</option>
+          <option>Ubuntu 22.04 LTS</option>
+        </select>
+        <select id="createVmSize" class="border px-3 py-2 rounded">
+          <option>StandardDS1_v2</option>
+          <option>StandardB2s</option>
+          <option>StandardDS2_v2</option>
+        </select>
+        <select id="createVmRegion" class="border px-3 py-2 rounded">
+          <option>East US</option>
+          <option>West US</option>
+          <option>Central India</option>
+        </select>
+        <input id="createVmUser" placeholder="Admin Username" class="border px-3 py-2 rounded" value="azureuser" />
+        <input id="createVmPass" placeholder="Admin Password" type="password" class="border px-3 py-2 rounded" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="bg-gray-100 px-4 py-2 rounded" onclick="closeCreateVmModal()">Cancel</button>
+        <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="createVm()">Create VM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Module -->
+  <div id="modalAddModule" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg w-11/12 md:w-1/2 p-6">
+      <h3 class="text-lg font-semibold mb-3">Add Module</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="moduleName" placeholder="Module Name (ex: opc-publisher)" class="border px-3 py-2 rounded" />
+        <input id="moduleImage" placeholder="Docker Image (ex: mcr.microsoft.com/azureiotedge/opc-publisher:latest)" class="border px-3 py-2 rounded" />
+        <textarea id="moduleCreateOptions" rows="3" placeholder="Create Options JSON" class="border px-3 py-2 rounded md:col-span-2"></textarea>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="bg-gray-100 px-4 py-2 rounded" onclick="closeAddModuleModal()">Cancel</button>
+        <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="addModule()">Install Module</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Node -->
+  <div id="modalAddNode" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg w-11/12 md:w-1/2 p-6">
+      <h3 class="text-lg font-semibold mb-3">Add Node</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input id="nodeIdInput" placeholder="Node ID (ns=2;s=...)" class="border px-3 py-2 rounded" />
+        <input id="nodeDisplayInput" placeholder="Display Name" class="border px-3 py-2 rounded" />
+        <input id="nodeSamplingInput" type="number" placeholder="Sampling Interval ms" class="border px-3 py-2 rounded" value="1000" />
+        <input id="nodePublishingInput" type="number" placeholder="Publishing Interval ms" class="border px-3 py-2 rounded" value="1000" />
+        <input id="nodeDeadbandInput" type="number" placeholder="Deadband" class="border px-3 py-2 rounded" />
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="bg-gray-100 px-4 py-2 rounded" onclick="closeAddNodeModal()">Cancel</button>
+        <button class="bg-green-600 text-white px-4 py-2 rounded" onclick="addNodeFromModal()">Add Node</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PN Preview -->
+  <div id="modalPnPreview" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-lg w-11/12 md:w-3/4 max-h-[80vh] overflow-auto p-6">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="text-lg font-semibold">pn.json Preview</h3>
+        <div class="flex gap-2">
+          <button class="bg-gray-100 px-3 py-1 rounded" onclick="downloadPnJson()">Download</button>
+          <button class="bg-red-500 text-white px-3 py-1 rounded" onclick="closePnPreview()">Close</button>
+        </div>
+      </div>
+      <pre id="pnPreviewContent" class="bg-slate-50 p-4 rounded mono text-sm"></pre>
+    </div>
+  </div>
+
+  <!-- SMALL TOAST -->
+  <div id="toast" class="fixed right-6 bottom-6 hidden bg-slate-800 text-white px-4 py-2 rounded shadow">Message</div>
+
+<script>
+/* --------------------------
+   Demo state (persisted locally)
+   -------------------------- */
+let vms = [];
+let modules = [];  // global modules (for demo)
+let nodes = [];    // nodes for current OPC endpoint
+let endpoint = null;
+let currentVm = null;
+
+/* --------------------------
+   Utility & Init
+   -------------------------- */
+function toast(msg, ms=2500) {
+  const t = document.getElementById('toast');
+  t.innerText = msg;
+  t.classList.remove('hidden');
+  setTimeout(()=> t.classList.add('hidden'), ms);
+}
+
+function saveState() {
+  localStorage.setItem('demo_vms', JSON.stringify(vms));
+  localStorage.setItem('demo_modules', JSON.stringify(modules));
+  localStorage.setItem('opc_endpoint', JSON.stringify(endpoint));
+  localStorage.setItem('opc_nodes', JSON.stringify(nodes));
+  updateStats();
+}
+
+function loadState() {
+  const a = localStorage.getItem('demo_vms');
+  if (a) vms = JSON.parse(a);
+  const b = localStorage.getItem('demo_modules');
+  if (b) modules = JSON.parse(b);
+  const c = localStorage.getItem('opc_endpoint');
+  if (c) endpoint = JSON.parse(c);
+  const d = localStorage.getItem('opc_nodes');
+  if (d) nodes = JSON.parse(d);
+  if (!vms.length) { // sample VMs for demo
+    vms = [
+      { id: 'vm-1', name: 'Factory-Edge-01', status: 'Running', os: 'Windows', location: 'East US', created: '2025-11-27', iotEdgeInstalled: true },
+      { id: 'vm-2', name: 'Factory-Edge-02', status: 'Stopped', os: 'Ubuntu', location: 'West US', created: '2025-11-25', iotEdgeInstalled: false }
+    ];
+    modules = [
+      { name: 'opc-publisher', status: 'Running', image: 'mcr.microsoft.com/azureiotedge/opc-publisher:latest', vmId: 'vm-1' },
+      { name: 'custom-module', status: 'Stopped', image: 'mlg/custom:1.0', vmId: 'vm-1' }
+    ];
+    nodes = [
+      { Id: 'ns=2;s=Machine/Temperature', DisplayName: 'Temperature', OpcSamplingInterval: 1000, OpcPublishingInterval: 1000, Deadband: 0 }
+    ];
+    endpoint = { url: 'opc.tcp://192.168.1.10:49320', protocol: 'opc.tcp', securityMode: 'SignAndEncrypt', securityPolicy: 'Basic256Sha256', authType: 'UsernamePassword', username: 'opcuser' };
+  }
+  saveState();
+  renderAll();
+}
+
+function updateStats() {
+  document.getElementById('statTotalVMs').innerText = vms.length;
+  document.getElementById('statModules').innerText = modules.length;
+  document.getElementById('statEndpoints').innerText = endpoint ? 1 : 0;
+}
+
+/* --------------------------
+   Views & Render
+   -------------------------- */
+function showView(name) {
+  // hide all
+  ['dashboard','vms','vm-details','opc','modules'].forEach(id => document.getElementById('view-'+id).classList.add('hidden'));
+  document.getElementById('view-'+name).classList.remove('hidden');
+  // update nav style
+  ['navDashboard','navVMs','navOPC','navModules'].forEach(n => document.getElementById(n).classList.remove('bg-indigo-50'));
+  if (name === 'dashboard') document.getElementById('navDashboard').classList.add('bg-indigo-50');
+  if (name === 'vms') document.getElementById('navVMs').classList.add('bg-indigo-50');
+  if (name === 'opc') document.getElementById('navOPC').classList.add('bg-indigo-50');
+  if (name === 'modules') document.getElementById('navModules').classList.add('bg-indigo-50');
+
+  if (name === 'dashboard') renderDashboardVmTable();
+  if (name === 'vms') renderVmTable();
+  if (name === 'opc') renderOpcView();
+  if (name === 'modules') renderModulesTable();
+}
+
+function renderAll() {
+  renderDashboardVmTable();
+  renderVmTable();
+  renderVmModulesTable();
+  renderModulesTable();
+  renderOpcView();
+  updateStats();
+}
+
+/* Dashboard VM table */
+function renderDashboardVmTable() {
+  const tbody = document.getElementById('dashboardVmTable');
+  tbody.innerHTML = '';
+  vms.forEach(vm => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-t';
+    tr.innerHTML = `
+      <td class="px-3 py-3">${vm.name}</td>
+      <td class="px-3 py-3">${vm.status}</td>
+      <td class="px-3 py-3">${vm.os}</td>
+      <td class="px-3 py-3">${vm.location}</td>
+      <td class="px-3 py-3">${vm.iotEdgeInstalled ? '<span class="text-green-600 font-semibold">Installed</span>' : '<span class="text-orange-600">Not installed</span>'}</td>
+      <td class="px-3 py-3">
+        <button class="bg-indigo-600 text-white px-2 py-1 rounded" onclick="openVmDetails('${vm.id}')">Manage</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* VM list */
+function renderVmTable() {
+  const tbody = document.getElementById('vmTableBody');
+  tbody.innerHTML = '';
+  const q = document.getElementById('vmSearch')?.value?.toLowerCase() || '';
+  vms.filter(vm => vm.name.toLowerCase().includes(q)).forEach(vm => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-t';
+    tr.innerHTML = `
+      <td class="px-3 py-3">${vm.name}</td>
+      <td class="px-3 py-3">${vm.status}</td>
+      <td class="px-3 py-3">${vm.os}</td>
+      <td class="px-3 py-3">${vm.location}</td>
+      <td class="px-3 py-3">${vm.created || '-'}</td>
+      <td class="px-3 py-3">
+        <button class="bg-blue-600 text-white px-2 py-1 rounded" onclick="vmAction('${vm.id}','start')">Start</button>
+        <button class="bg-yellow-500 text-white px-2 py-1 rounded" onclick="vmAction('${vm.id}','stop')">Stop</button>
+        <button class="bg-gray-100 px-2 py-1 rounded" onclick="openVmDetails('${vm.id}')">Manage</button>
+        <button class="bg-red-600 text-white px-2 py-1 rounded" onclick="vmAction('${vm.id}','delete')">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* VM Details */
+function openVmDetails(vmId) {
+  const vm = vms.find(x => x.id === vmId);
+  if (!vm) { toast('VM not found'); return; }
+  currentVm = vm;
+  document.getElementById('detailVmName').innerText = vm.name;
+  document.getElementById('detailVmInfo').innerText = `${vm.os} • ${vm.location} • Created ${vm.created || '-'}`;
+  document.getElementById('detailVmStatus').innerText = vm.status;
+  document.getElementById('detailIotEdgeStatus').innerText = vm.iotEdgeInstalled ? 'Installed' : 'Not Installed';
+  document.getElementById('detailIotEdgeVersion').innerText = vm.iotEdgeVersion || '-';
+  renderVmModulesTable(vmId);
+  showView('vm-details');
+}
+
+function backToVmList() {
+  showView('vms');
+}
+
+function renderVmModulesTable(vmId = null) {
+  const tbody = document.getElementById('vmModulesTable');
+  tbody.innerHTML = '';
+  const list = (vmId ? modules.filter(m=>m.vmId === vmId) : modules);
+  list.forEach(mod => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-t';
+    tr.innerHTML = `
+      <td class="px-3 py-3">${mod.name}</td>
+      <td class="px-3 py-3">${mod.status}</td>
+      <td class="px-3 py-3">${mod.version || '-'}</td>
+      <td class="px-3 py-3">
+        <button class="bg-blue-600 text-white px-2 py-1 rounded" onclick="moduleAction('${mod.name}','start','${mod.vmId}')">Start</button>
+        <button class="bg-yellow-500 text-white px-2 py-1 rounded" onclick="moduleAction('${mod.name}','stop','${mod.vmId}')">Stop</button>
+        <button class="bg-gray-100 px-2 py-1 rounded" onclick="moduleAction('${mod.name}','restart','${mod.vmId}')">Restart</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* Modules list view */
+function renderModulesTable() {
+  const tbody = document.getElementById('modulesTableBody');
+  tbody.innerHTML = '';
+  modules.forEach(mod => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-t';
+    tr.innerHTML = `
+      <td class="px-3 py-3">${mod.name}</td>
+      <td class="px-3 py-3">${mod.status}</td>
+      <td class="px-3 py-3 mono text-xs">${mod.image}</td>
+      <td class="px-3 py-3">
+        <button class="bg-blue-600 text-white px-2 py-1 rounded" onclick="moduleAction('${mod.name}','start','${mod.vmId}')">Start</button>
+        <button class="bg-yellow-500 text-white px-2 py-1 rounded" onclick="moduleAction('${mod.name}','stop','${mod.vmId}')">Stop</button>
+        <button class="bg-red-600 text-white px-2 py-1 rounded" onclick="removeModulePrompt('${mod.name}','${mod.vmId}')">Remove</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* OPC view render */
+function renderOpcView() {
+  document.getElementById('endpointUrl').value = endpoint ? endpoint.url : '';
+  document.getElementById('endpointProtocol').value = endpoint ? endpoint.protocol : 'opc.tcp';
+  document.getElementById('endpointSecurityMode').value = endpoint ? endpoint.securityMode : 'None';
+  document.getElementById('endpointSecurityPolicy').value = endpoint ? endpoint.securityPolicy : 'None';
+  document.getElementById('endpointAuthType').value = endpoint ? endpoint.authType : 'Anonymous';
+  renderEndpointAuthExtras();
+  document.getElementById('summaryEndpoint').innerText = endpoint ? endpoint.url : 'Not set';
+  document.getElementById('summaryNodesCount').innerText = nodes.length;
+  renderNodesTable();
+}
+
+function renderNodesTable() {
+  const tbody = document.getElementById('nodesTableBody');
+  tbody.innerHTML = '';
+  nodes.forEach((n, idx) => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-t';
+    tr.innerHTML = `
+      <td class="px-3 py-2">${escapeHtml(n.Id)}</td>
+      <td class="px-3 py-2">${escapeHtml(n.DisplayName)}</td>
+      <td class="px-3 py-2">${n.OpcSamplingInterval}</td>
+      <td class="px-3 py-2">${n.OpcPublishingInterval}</td>
+      <td class="px-3 py-2">${n.Deadband ?? ''}</td>
+      <td class="px-3 py-2">
+        <button class="bg-red-600 text-white px-2 py-1 rounded" onclick="deleteNode(${idx})">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* --------------------------
+   Actions (placeholders)
+   -------------------------- */
+function refreshVmList() {
+  // TODO: replace with GET /api/vm/list
+  toast('Refreshing VM list (demo). Hook to /api/vm/list');
+  renderAll();
+}
+
+function vmAction(vmId, action) {
+  // actions: start / stop / delete
+  // TODO: call backend APIs
+  const vm = vms.find(v=>v.id===vmId);
+  if (!vm) { toast('VM not found'); return; }
+  if (action === 'start') vm.status = 'Running';
+  if (action === 'stop') vm.status = 'Stopped';
+  if (action === 'delete') {
+    if (!confirm('Delete VM and all resources?')) return;
+    vms = vms.filter(v=>v.id !== vmId);
+    modules = modules.filter(m=>m.vmId !== vmId);
+    toast('VM deleted (demo)');
+  }
+  saveState();
+  renderAll();
+}
+
+// Create VM modal
+function openCreateVmModal() { document.getElementById('modalCreateVm').classList.remove('hidden'); }
+function closeCreateVmModal() { document.getElementById('modalCreateVm').classList.add('hidden'); }
+
+function createVm() {
+  const name = document.getElementById('createVmName').value.trim();
+  const os = document.getElementById('createVmOS').value;
+  const size = document.getElementById('createVmSize').value;
+  const region = document.getElementById('createVmRegion').value;
+  const user = document.getElementById('createVmUser').value;
+  const pass = document.getElementById('createVmPass').value;
+  if (!name) { alert('VM name required'); return; }
+
+  // TODO: call backend to create actual Azure VM
+  const id = 'vm-' + Date.now();
+  vms.unshift({ id, name, status: 'Provisioning', os, location: region, created: new Date().toISOString().split('T')[0], iotEdgeInstalled: false });
+  saveState();
+  closeCreateVmModal();
+  toast('VM creation requested (demo). Implement POST /api/vm/create');
+}
+
+// IoT Edge install/uninstall
+function installIotEdge() {
+  if (!currentVm) { toast('Open a VM first'); return; }
+  // TODO: call backend to run custom script or extension
+  currentVm.iotEdgeInstalled = true;
+  currentVm.iotEdgeVersion = '1.4.0';
+  saveState();
+  renderAll();
+  toast('Install IoT Edge requested (demo). Backend should run custom script extension.');
+}
+function uninstallIotEdge() {
+  if (!currentVm) { toast('Open a VM first'); return; }
+  if (!confirm('Uninstall IoT Edge runtime from this VM?')) return;
+  currentVm.iotEdgeInstalled = false;
+  saveState();
+  renderAll();
+  toast('Uninstall requested (demo).');
+}
+
+/* Modules */
+function openAddModuleModal() { document.getElementById('modalAddModule').classList.remove('hidden'); }
+function closeAddModuleModal() { document.getElementById('modalAddModule').classList.add('hidden'); }
+
+function addModule() {
+  const name = document.getElementById('moduleName').value.trim();
+  const image = document.getElementById('moduleImage').value.trim();
+  const createOptions = document.getElementById('moduleCreateOptions').value.trim();
+  if (!name || !image) { alert('Module name and image required'); return; }
+
+  // TODO: call backend /api/modules/install with module info and target VM(s)
+  const vmId = currentVm ? currentVm.id : (vms.length ? vms[0].id : null);
+  modules.unshift({ name, image, createOptions, status: 'Deploying', vmId });
+  saveState();
+  closeAddModuleModal();
+  renderAll();
+  toast('Module install requested (demo). Wire to /api/modules/install');
+}
+
+function moduleAction(name, action, vmId) {
+  // TODO: call backend to start/stop/restart module (IoT Hub direct method or module twin update)
+  const mod = modules.find(m => m.name === name && m.vmId === vmId);
+  if (!mod) { toast('Module not found'); return; }
+  if (action === 'start') mod.status = 'Running';
+  if (action === 'stop') mod.status = 'Stopped';
+  if (action === 'restart') mod.status = 'Restarting';
+  saveState();
+  renderAll();
+  toast(`${action} module requested (demo). Implement /api/modules/${action}`);
+}
+
+function removeModulePrompt(name, vmId) {
+  if (!confirm('Remove module?')) return;
+  modules = modules.filter(m => !(m.name === name && m.vmId === vmId));
+  saveState();
+  renderAll();
+  toast('Module removed (demo).');
+}
+
+/* --------------------------
+   OPC: endpoint, nodes, pn.json
+   -------------------------- */
+function onEndpointAuthChange() { renderEndpointAuthExtras(); }
+
+function renderEndpointAuthExtras() {
+  const container = document.getElementById('endpointAuthExtras');
+  const auth = document.getElementById('endpointAuthType').value;
+  container.innerHTML = '';
+  if (auth === 'UsernamePassword') {
+    container.innerHTML = `
+      <div>
+        <label class="text-sm text-slate-600">Username</label>
+        <input id="epUser" class="border px-3 py-2 rounded w-full mt-1" />
+      </div>
+      <div class="mt-2">
+        <label class="text-sm text-slate-600">Password</label>
+        <input id="epPass" type="password" class="border px-3 py-2 rounded w-full mt-1" />
+      </div>
+    `;
+    if (endpoint && endpoint.username) document.getElementById('epUser').value = endpoint.username;
+  } else if (auth === 'Certificate') {
+    container.innerHTML = `
+      <div>
+        <label class="text-sm text-slate-600">Certificate (PEM)</label>
+        <input id="epCert" type="file" accept=".pem,.crt,.cer" class="w-full mt-1" />
+      </div>
+      <div class="mt-2">
+        <label class="text-sm text-slate-600">Private Key (PEM)</label>
+        <input id="epKey" type="file" accept=".pem,.key" class="w-full mt-1" />
+      </div>
+    `;
+  }
+}
+
+function saveEndpoint() {
+  const url = document.getElementById('endpointUrl').value.trim();
+  const protocol = document.getElementById('endpointProtocol').value;
+  const securityMode = document.getElementById('endpointSecurityMode').value;
+  const securityPolicy = document.getElementById('endpointSecurityPolicy').value;
+  const authType = document.getElementById('endpointAuthType').value;
+  if (!url) { alert('Endpoint URL required'); return; }
+  endpoint = { url, protocol, securityMode, securityPolicy, authType };
+  if (authType === 'UsernamePassword') {
+    endpoint.username = document.getElementById('epUser')?.value;
+    endpoint.password = document.getElementById('epPass')?.value;
+  }
+  // NOTE: file inputs for certificate are not persisted in demo JS. Backend should accept file upload storage.
+  saveState();
+  renderOpcView();
+  toast('Endpoint saved locally. Connect saveEndpoint() to backend POST /api/opc/endpoint');
+}
+
+function loadEndpoint() {
+  if (!endpoint) { toast('No saved endpoint'); return; }
+  renderOpcView();
+  toast('Loaded saved endpoint into form.');
+}
+
+function testEndpoint() {
+  // TODO: call backend to test connection (server will attempt to reach OPC endpoint)
+  toast('Test connection requested (demo). Implement backend test using OPC UA client library.');
+}
+
+/* Node modal */
+function openAddNodeModal() { document.getElementById('modalAddNode').classList.remove('hidden'); }
+function closeAddNodeModal() { document.getElementById('modalAddNode').classList.add('hidden'); }
+
+function addNodeFromModal() {
+  const id = document.getElementById('nodeIdInput').value.trim();
+  const display = document.getElementById('nodeDisplayInput').value.trim();
+  const sampling = parseInt(document.getElementById('nodeSamplingInput').value) || 1000;
+  const publishing = parseInt(document.getElementById('nodePublishingInput').value) || 1000;
+  const deadband = document.getElementById('nodeDeadbandInput').value || 0;
+  if (!id) { alert('Node ID required'); return; }
+  nodes.unshift({ Id: id, DisplayName: display || id, OpcSamplingInterval: sampling, OpcPublishingInterval: publishing, Deadband: deadband });
+  saveState();
+  closeAddNodeModal();
+  renderNodesTable();
+  toast('Node added (local demo)');
+}
+
+function deleteNode(index) {
+  if (!confirm('Delete node?')) return;
+  nodes.splice(index, 1);
+  saveState();
+  renderNodesTable();
+  toast('Node removed (demo)');
+}
+
+function clearNodes() {
+  if (!confirm('Clear all nodes?')) return;
+  nodes = [];
+  saveState();
+  renderNodesTable();
+  toast('All nodes cleared');
+}
+
+/* pn.json generation / preview / deploy */
+function buildPnJson() {
+  if (!endpoint) { alert('Endpoint not configured'); return null; }
+  const cfg = {
+    EndpointUrl: endpoint.url,
+    TransportProtocol: endpoint.protocol,
+    UseSecurity: endpoint.securityMode !== 'None',
+    SecurityMode: endpoint.securityMode,
+    SecurityPolicy: endpoint.securityPolicy,
+    OpcNodes: nodes.map(n => ({ Id: n.Id, DisplayName: n.DisplayName, OpcSamplingInterval: n.OpcSamplingInterval, OpcPublishingInterval: n.OpcPublishingInterval, Deadband: n.Deadband })),
+    UserAuth: null
+  };
+  if (endpoint.authType === 'UsernamePassword') {
+    cfg.UserAuth = { Type: 'UsernamePassword', Username: endpoint.username, Password: endpoint.password };
+  } else if (endpoint.authType === 'Certificate') {
+    cfg.UserAuth = { Type: 'Certificate', Note: 'Certificate files must be uploaded to backend and referenced here.' };
+  } else cfg.UserAuth = { Type: 'Anonymous' };
+  return cfg;
+}
+
+function generatePnJson() {
+  const pn = buildPnJson();
+  if (!pn) return;
+  localStorage.setItem('pn_json', JSON.stringify(pn, null, 2));
+  toast('pn.json generated and saved locally (demo)');
+}
+
+function previewPnJson() {
+  const pn = localStorage.getItem('pn_json');
+  if (!pn) { alert('pn.json not generated yet. Click Generate pn.json'); return; }
+  document.getElementById('pnPreviewContent').innerText = pn;
+  document.getElementById('modalPnPreview').classList.remove('hidden');
+}
+
+function closePnPreview() { document.getElementById('modalPnPreview').classList.add('hidden'); }
+
+function downloadPnJson() {
+  const pn = localStorage.getItem('pn_json');
+  if (!pn) { toast('No pn.json to download'); return; }
+  const blob = new Blob([pn], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'pn.json'; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function deployPnJson() {
+  // TODO: POST /api/opc/deploy with target VM/module
+  if (!localStorage.getItem('pn_json')) { alert('Generate pn.json first'); return; }
+  toast('Deploy pn.json requested (demo). Connect to /api/opc/deploy to push to module twin or direct method.');
+}
+
+function restartOpcPublisher() {
+  // TODO: POST /api/opc/module/restart
+  toast('Restart OPC Publisher requested (demo). Implement API call to IoT Hub direct method or module restart.');
+}
+
+/* Utilities */
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* --------------------------
+   Init
+   -------------------------- */
+loadState();
+showView('dashboard');
+
+</script>
+</body>
+</html>
