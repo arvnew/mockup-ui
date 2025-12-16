@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ML Training Wizard (Engineer)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f4f6fb;
+  margin: 0;
+  padding: 24px;
+  color: #1f2937;
+}
+.container {
+  max-width: 1100px;
+  margin: auto;
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+}
+h1 {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+.step {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  margin-bottom: 28px;
+}
+.step h2 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+label {
+  display: block;
+  font-weight: 600;
+  margin-top: 10px;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  margin-top: 4px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 8px;
+  text-align: left;
+}
+th {
+  background: #f3f4f6;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+button.secondary {
+  background: #6b7280;
+}
+button:hover {
+  background: #1d4ed8;
+}
+.code {
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: monospace;
+  white-space: pre-wrap;
+}
+.hint {
+  font-size: 12px;
+  color: #6b7280;
+}
+.checkbox-list label {
+  font-weight: normal;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h1>ML Training Wizard (Engineer Portal)</h1>
+  <p class="hint">Describe your data → system handles ML automatically</p>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <h2>1️⃣ Select Raw Data (Blob)</h2>
+    <label>Blob Path</label>
+    <input id="blobPath" placeholder="raw/clientA/device01/">
+
+    <label>File Format</label>
+    <select id="fileFormat">
+      <option>csv</option>
+      <option>json</option>
+      <option>parquet</option>
+    </select>
+
+    <button onclick="loadPreview()">Preview Data</button>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <h2>2️⃣ Data Preview (Sample)</h2>
+    <table id="previewTable">
+      <thead>
+        <tr><th>timestamp</th><th>temperature</th><th>vibration</th><th>rpm</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2025-01-01 10:00</td><td>65</td><td>2.1</td><td>1500</td></tr>
+        <tr><td>2025-01-01 10:01</td><td>66</td><td>2.2</td><td>1498</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Preview shown from first rows (mock data)</p>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <h2>3️⃣ Select Timestamp Column</h2>
+    <label>Timestamp Column</label>
+    <select id="timestampColumn">
+      <option>timestamp</option>
+    </select>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <h2>4️⃣ Select Numeric Columns for Training</h2>
+    <div class="checkbox-list">
+      <label><input type="checkbox" value="temperature" checked> temperature</label>
+      <label><input type="checkbox" value="vibration" checked> vibration</label>
+      <label><input type="checkbox" value="rpm" checked> rpm</label>
+    </div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <h2>5️⃣ Select Time Window</h2>
+    <label>Window Size</label>
+    <select id="windowSize">
+      <option value="5m">5 Minutes (fast signals)</option>
+      <option value="10m" selected>10 Minutes (recommended)</option>
+      <option value="1h">1 Hour (slow assets)</option>
+    </select>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="step">
+    <h2>6️⃣ Label Column (Optional)</h2>
+    <label>Training Type</label>
+    <select id="trainingType">
+      <option value="anomaly">Anomaly Detection (no failure labels)</option>
+      <option value="supervised">Failure Prediction (with labels)</option>
+    </select>
+
+    <label>Label Column</label>
+    <input id="labelColumn" placeholder="failure_flag (optional)">
+  </div>
+
+  <!-- STEP 7 -->
+  <div class="step">
+    <h2>7️⃣ Generated Training Config</h2>
+    <button onclick="generateConfig()">Generate Config</button>
+    <div id="configOutput" class="code">// config will appear here</div>
+  </div>
+
+  <!-- STEP 8 -->
+  <div class="step">
+    <h2>8️⃣ Request Training</h2>
+    <button class="secondary">Submit Training Request</button>
+    <p class="hint">This will trigger downstream ML pipeline</p>
+  </div>
+</div>
+
+<script>
+function loadPreview() {
+  alert("Backend will load preview data from Blob (mocked here).");
+}
+
+function generateConfig() {
+  const sensors = [];
+  document.querySelectorAll('input[type=checkbox]:checked')
+    .forEach(cb => sensors.push(cb.value));
+
+  const config = {
+    dataSource: {
+      blobPath: document.getElementById("blobPath").value,
+      fileFormat: document.getElementById("fileFormat").value
+    },
+    schema: {
+      timestampColumn: document.getElementById("timestampColumn").value
+    },
+    features: {
+      numericColumns: sensors
+    },
+    windowing: {
+      windowSize: document.getElementById("windowSize").value
+    },
+    training: {
+      type: document.getElementById("trainingType").value,
+      labelColumn: document.getElementById("labelColumn").value || null
+    }
+  };
+
+  document.getElementById("configOutput").innerText =
+    JSON.stringify(config, null, 2);
+}
+</script>
+</body>
+</html>
